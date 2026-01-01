@@ -1,0 +1,5 @@
+{
+  "name": "BarberPro POS",
+  "description": "A comprehensive Point of Sale system for Barber Shops featuring appointment booking, inventory management, staff commission tracking, and simulated M-Pesa payments.",
+  "requestFramePermissions": []
+}
