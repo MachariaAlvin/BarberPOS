@@ -184,7 +184,7 @@ app.post('/api/auth/signup', async (req, res) => {
     await Staff.create({
       id: ownerId, businessId, name: ownerName, email, role: 'Owner', commissionRate: 0, 
       phone: '', avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(ownerName)}`,
-      username, passwordHash: password, version: 1
+      username, passwordHash: password, status: 'Active', version: 1
     });
     await Settings.create({
       id: `SET-${businessId}`, businessId,
@@ -217,6 +217,11 @@ app.post('/api/auth/login', async (req, res) => {
 
     const user = await Staff.findOne({ businessId: business.id, username: { $regex: new RegExp(`^${username}$`, 'i') } });
     if (!user || (password !== user.passwordHash && password !== 'password')) return res.status(401).json({ error: "Invalid credentials." });
+
+    // SECURITY CHECK: Block inactive users
+    if (user.status === 'Inactive') {
+        return res.status(403).json({ error: "Account deactivated. Please contact your manager." });
+    }
 
     const accessToken = jwt.sign({ id: user.id, businessId: user.businessId, role: user.role }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ accessToken, user: { id: user.id, businessId: user.businessId, name: user.name, role: user.role, avatar: user.avatar }, requiresMfa: false });

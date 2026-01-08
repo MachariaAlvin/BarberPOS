@@ -49,6 +49,7 @@ const staffSchema = new mongoose.Schema({
   avatar: String,
   username: String,
   passwordHash: String,
+  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
   version: { type: Number, default: 1 }
 });
 
@@ -194,6 +195,7 @@ async function seedData() {
         avatar: 'https://ui-avatars.com/api/?name=Admin', 
         username: 'admin', 
         passwordHash: 'password', 
+        status: 'Active',
         version: 1 
       });
     }

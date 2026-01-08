@@ -1,7 +1,7 @@
 
 import { Staff, Service, Product, Customer, Transaction, Appointment, AppSettings, Business, AuditLog } from '../types';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = process.env.REACT_APP_API_BASE_URL;
 
 class ApiService {
   private getHeaders() {

@@ -1,11 +1,6 @@
 
-
-
-
-
 import { Staff, Service, Product, Customer, Transaction, Appointment, AppSettings, Role } from '../types';
 
-// Declare sql.js global type
 declare global {
   interface Window {
     initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<any>;
@@ -18,17 +13,20 @@ const KEY_NAME = 'db_file';
 
 class DatabaseService {
   private db: any = null;
+  private initialized = false;
 
   async init() {
-    if (this.db) return;
+    if (this.initialized) return;
 
     try {
-      // 1. Initialize SQL.js
+      if (!window.initSqlJs) {
+        throw new Error("SQL.js library not found on page. Check script tags.");
+      }
+
       const SQL = await window.initSqlJs({
         locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
       });
 
-      // 2. Load DB from IndexedDB
       const savedData = await this.loadFromIDB();
 
       if (savedData) {
@@ -41,6 +39,7 @@ class DatabaseService {
         this.seedData();
         await this.saveToIDB();
       }
+      this.initialized = true;
     } catch (err) {
       console.error("Failed to initialize database:", err);
       throw err;
@@ -85,7 +84,7 @@ class DatabaseService {
   }
 
   private runMigrations() {
-    // Create Tables
+    if (!this.db) return;
     this.db.run(`
       CREATE TABLE IF NOT EXISTS staff (
         id TEXT PRIMARY KEY,
@@ -96,6 +95,7 @@ class DatabaseService {
         avatar TEXT,
         username TEXT,
         passwordHash TEXT,
+        status TEXT DEFAULT 'Active',
         version INTEGER
       );
       CREATE TABLE IF NOT EXISTS services (
@@ -136,7 +136,7 @@ class DatabaseService {
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
         timestamp TEXT,
-        items TEXT, -- JSON Array
+        items TEXT,
         total REAL,
         paymentMethod TEXT,
         status TEXT,
@@ -153,19 +153,17 @@ class DatabaseService {
   }
 
   private seedData() {
-    // Check if data exists
+    if (!this.db) return;
     const res = this.db.exec("SELECT count(*) FROM staff");
     if (res[0].values[0][0] > 0) return;
 
-    // Seed Staff
-    this.db.run(`INSERT INTO staff VALUES 
-      ('s1', 'James Carter', 'Owner', 0.0, '0712345678', 'https://picsum.photos/100/100?random=1', 'admin', '$2b$10$EpRnTzVlqHNP0.fKb.U00.xk', 1),
-      ('s2', 'Sarah Mwangi', 'Manager', 0.10, '0722334455', 'https://picsum.photos/100/100?random=2', 'sarah', 'hash_sarah', 1),
-      ('s3', 'David Kimani', 'Barber', 0.4, '0799887766', 'https://picsum.photos/100/100?random=3', 'barber', 'hash_barber', 1),
-      ('s4', 'Lisa Achieng', 'Cashier', 0.0, '0711122233', 'https://picsum.photos/100/100?random=4', 'cashier', 'hash_cashier', 1)
+    this.db.run(`INSERT INTO staff (id, name, role, commissionRate, phone, avatar, username, passwordHash, status, version) VALUES 
+      ('s1', 'James Carter', 'Owner', 0.0, '0712345678', 'https://picsum.photos/100/100?random=1', 'admin', 'password', 'Active', 1),
+      ('s2', 'Sarah Mwangi', 'Manager', 0.10, '0722334455', 'https://picsum.photos/100/100?random=2', 'sarah', 'password', 'Active', 1),
+      ('s3', 'David Kimani', 'Barber', 0.4, '0799887766', 'https://picsum.photos/100/100?random=3', 'barber', 'password', 'Active', 1),
+      ('s4', 'Lisa Achieng', 'Cashier', 0.0, '0711122233', 'https://picsum.photos/100/100?random=4', 'cashier', 'password', 'Active', 1)
     `);
 
-    // Seed Services
     this.db.run(`INSERT INTO services VALUES 
       ('srv1', 'Standard Haircut', 500, 45, 'Hair', 1),
       ('srv2', 'Beard Trim & Shape', 300, 20, 'Beard', 1),
@@ -173,28 +171,24 @@ class DatabaseService {
       ('srv4', 'Hot Towel Shave', 800, 30, 'Treatment', 1)
     `);
 
-    // Seed Products
     this.db.run(`INSERT INTO products VALUES 
       ('p1', 'Matte Pomade', 800, 15, 'Retail', 1),
       ('p2', 'Beard Oil', 1200, 8, 'Retail', 1),
       ('p3', 'Shampoo (Internal)', 0, 5, 'Internal', 1)
     `);
 
-    // Seed Customers
     this.db.run(`INSERT INTO customers VALUES 
-      ('c1', 'Michael Omondi', '0711223344', 'mike@example.com', 'Prefers scissors over clippers on top.', '2023-01-15', 1),
-      ('c2', 'John Doe', '0722000000', 'john@example.com', 'Allergic to latex.', '2023-05-20', 1),
-      ('c3', 'Alice Wanjiku', '0733112233', 'alice@example.com', '', '2023-08-10', 1)
+      ('c1', 'Michael Omondi', '0711223344', 'mike@example.com', 'Prefers scissors over clippers.', '2023-01-15', 1),
+      ('c2', 'John Doe', '0722000000', 'john@example.com', 'Allergic to latex.', '2023-05-20', 1)
     `);
 
-    // Seed Settings (JSON)
     const initialSettings = {
       business: {
         name: 'BarberPro',
         phone: '0712 345 678',
         email: 'info@barberpro.co.ke',
         location: 'Nairobi, Kenya',
-        receiptHeader: 'Thank you for visiting BarberPro!',
+        receiptHeader: 'Thank you for visiting!',
         receiptFooter: 'See you next time.',
         autoPrintReceipt: false,
       },
@@ -203,11 +197,6 @@ class DatabaseService {
         acceptMpesa: true,
         acceptCard: true,
         acceptSplit: true,
-        sendSmsReceipt: false,
-        sendWhatsappReceipt: false,
-        lipaOnlineApiKey: '42cd50d27b8dd389eedb1b6a2bf71624c8bda84c', // Seeded API Key
-        lipaOnlineShortcode: '174379',
-        lipaOnlineEndpoint: 'https://api.lipaonline.com/v1/stkpush'
       },
       bible: {
         enabled: true,
@@ -226,33 +215,36 @@ class DatabaseService {
     this.db.run(`INSERT INTO settings (id, json_content, version) VALUES (1, ?, 1)`, [JSON.stringify(initialSettings)]);
   }
 
-  // --- CRUD Operations ---
-
   getStaff(): Staff[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM staff");
     if (!res.length) return [];
     return this.mapResults(res[0]);
   }
 
   getServices(): Service[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM services");
     if (!res.length) return [];
     return this.mapResults(res[0]);
   }
 
   getProducts(): Product[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM products");
     if (!res.length) return [];
     return this.mapResults(res[0]);
   }
 
   getCustomers(): Customer[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM customers");
     if (!res.length) return [];
     return this.mapResults(res[0]);
   }
 
   getTransactions(): Transaction[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM transactions ORDER BY timestamp DESC");
     if (!res.length) return [];
     const rows = this.mapResults(res[0]);
@@ -264,125 +256,112 @@ class DatabaseService {
   }
 
   getAppointments(): Appointment[] {
+    if (!this.initialized || !this.db) return [];
     const res = this.db.exec("SELECT * FROM appointments");
     if (!res.length) return [];
     return this.mapResults(res[0]);
   }
 
   getSettings(): AppSettings {
+    if (!this.initialized || !this.db) return {} as AppSettings;
     const res = this.db.exec("SELECT json_content FROM settings WHERE id = 1");
-    if (!res.length) return {} as AppSettings; // Should not happen due to seed
+    if (!res.length) return {} as AppSettings;
     return JSON.parse(res[0].values[0][0] as string);
   }
 
-  // --- Mutators ---
-
   async addTransaction(t: Transaction) {
-    // Use INSERT OR REPLACE to allow updating the same transaction (e.g. Pending -> Completed)
-    // IMPORTANT: Sanitize undefined values to null because sql.js does not accept undefined
+    if (!this.db) return;
     this.db.run(
       `INSERT OR REPLACE INTO transactions (id, timestamp, items, total, paymentMethod, status, customerId, customerName, isSynced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        t.id, 
-        t.timestamp, 
-        JSON.stringify(t.items), 
-        t.total ?? null, 
-        t.paymentMethod, 
-        t.status, 
-        t.customerId || null, 
-        t.customerName || null, 
-        t.isSynced ? 1 : 0
-      ]
+      [t.id, t.timestamp, JSON.stringify(t.items), t.total ?? null, t.paymentMethod, t.status, t.customerId || null, t.customerName || null, t.isSynced ? 1 : 0]
     );
-    await this.saveToIDB();
-  }
-
-  async updateTransactionStatus(id: string, status: string) {
-     this.db.run(`UPDATE transactions SET status = ? WHERE id = ?`, [status, id]);
-     await this.saveToIDB();
-  }
-
-  async addProduct(p: Product) {
-    this.db.run(`INSERT INTO products VALUES (?, ?, ?, ?, ?, ?)`, [p.id, p.name, p.price, p.stock, p.category, p.version]);
-    await this.saveToIDB();
-  }
-
-  async updateProduct(p: Product) {
-    this.db.run(`UPDATE products SET name = ?, price = ?, stock = ?, category = ?, version = ? WHERE id = ?`, 
-      [p.name, p.price, p.stock, p.category, p.version, p.id]
-    );
-    await this.saveToIDB();
-  }
-
-  async updateProductStock(id: string, newStock: number, newVersion: number) {
-    this.db.run(`UPDATE products SET stock = ?, version = ? WHERE id = ?`, [newStock, newVersion, id]);
-    await this.saveToIDB();
-  }
-
-  async deleteProduct(id: string) {
-    this.db.run(`DELETE FROM products WHERE id = ?`, [id]);
-    await this.saveToIDB();
-  }
-
-  async addCustomer(c: Customer) {
-    this.db.run(`INSERT INTO customers VALUES (?, ?, ?, ?, ?, ?, ?)`, [c.id, c.name, c.phone, c.email || '', c.notes || '', c.joinDate, c.version]);
-    await this.saveToIDB();
-  }
-
-  async updateCustomer(c: Customer) {
-    this.db.run(
-      `UPDATE customers SET name = ?, phone = ?, email = ?, notes = ?, version = ? WHERE id = ?`,
-      [c.name, c.phone, c.email || '', c.notes || '', c.version, c.id]
-    );
-    await this.saveToIDB();
-  }
-
-  async addAppointment(a: Appointment) {
-    this.db.run(`INSERT INTO appointments VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [a.id, a.customerName, a.customerPhone, a.serviceId, a.staffId, a.date, a.status, a.version]);
-    await this.saveToIDB();
-  }
-
-  async updateAppointmentStatus(id: string, status: string, version: number) {
-    this.db.run(`UPDATE appointments SET status = ?, version = ? WHERE id = ?`, [status, version, id]);
     await this.saveToIDB();
   }
 
   async addStaff(s: Staff) {
-    // Sanitize optional credentials
-    this.db.run(`INSERT INTO staff VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-      [s.id, s.name, s.role, s.commissionRate, s.phone, s.avatar, s.username || null, s.passwordHash || null, s.version]
-    );
+    if (!this.db) return;
+    this.db.run(`INSERT INTO staff (id, name, role, commissionRate, phone, avatar, username, passwordHash, status, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [s.id, s.name, s.role, s.commissionRate, s.phone, s.avatar, s.username || null, s.passwordHash || null, s.status, s.version]);
     await this.saveToIDB();
   }
 
   async updateStaff(s: Staff) {
-    this.db.run(`UPDATE staff SET name=?, role=?, commissionRate=?, phone=?, avatar=?, username=?, passwordHash=?, version=? WHERE id=?`,
-      [s.name, s.role, s.commissionRate, s.phone, s.avatar, s.username || null, s.passwordHash || null, s.version, s.id]
-    );
+    if (!this.db) return;
+    this.db.run(`UPDATE staff SET name=?, role=?, commissionRate=?, phone=?, avatar=?, username=?, passwordHash=?, status=?, version=? WHERE id=?`, [s.name, s.role, s.commissionRate, s.phone, s.avatar, s.username || null, s.passwordHash || null, s.status, s.version, s.id]);
     await this.saveToIDB();
   }
 
   async deleteStaff(id: string) {
+    if (!this.db) return;
     this.db.run(`DELETE FROM staff WHERE id=?`, [id]);
     await this.saveToIDB();
   }
 
   async addService(s: Service) {
+    if (!this.db) return;
     this.db.run(`INSERT INTO services VALUES (?, ?, ?, ?, ?, ?)`, [s.id, s.name, s.price, s.duration, s.category, s.version]);
     await this.saveToIDB();
   }
   
   async removeService(id: string) {
+    if (!this.db) return;
     this.db.run(`DELETE FROM services WHERE id = ?`, [id]);
     await this.saveToIDB();
   }
 
+  async addProduct(p: Product) {
+    if (!this.db) return;
+    this.db.run(`INSERT INTO products VALUES (?, ?, ?, ?, ?, ?)`, [p.id, p.name, p.price, p.stock, p.category, p.version]);
+    await this.saveToIDB();
+  }
+
+  async updateProductStock(id: string, newStock: number, newVersion: number) {
+    if (!this.db) return;
+    this.db.run(`UPDATE products SET stock = ?, version = ? WHERE id = ?`, [newStock, newVersion, id]);
+    await this.saveToIDB();
+  }
+
+  async updateProduct(p: Product) {
+    if (!this.db) return;
+    this.db.run(`UPDATE products SET name = ?, price = ?, stock = ?, category = ?, version = ? WHERE id = ?`, [p.name, p.price, p.stock, p.category, p.version, p.id]);
+    await this.saveToIDB();
+  }
+
+  async deleteProduct(id: string) {
+    if (!this.db) return;
+    this.db.run(`DELETE FROM products WHERE id = ?`, [id]);
+    await this.saveToIDB();
+  }
+
+  async addCustomer(c: Customer) {
+    if (!this.db) return;
+    this.db.run(`INSERT INTO customers VALUES (?, ?, ?, ?, ?, ?, ?)`, [c.id, c.name, c.phone, c.email || '', c.notes || '', c.joinDate, c.version]);
+    await this.saveToIDB();
+  }
+
+  async updateCustomer(c: Customer) {
+    if (!this.db) return;
+    this.db.run(`UPDATE customers SET name = ?, phone = ?, email = ?, notes = ?, version = ? WHERE id = ?`, [c.name, c.phone, c.email || '', c.notes || '', c.version, c.id]);
+    await this.saveToIDB();
+  }
+
+  async addAppointment(a: Appointment) {
+    if (!this.db) return;
+    this.db.run(`INSERT INTO appointments VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [a.id, a.customerName, a.customerPhone, a.serviceId, a.staffId, a.date, a.status, a.version]);
+    await this.saveToIDB();
+  }
+
+  async updateAppointmentStatus(id: string, status: string, version: number) {
+    if (!this.db) return;
+    this.db.run(`UPDATE appointments SET status = ?, version = ? WHERE id = ?`, [status, version, id]);
+    await this.saveToIDB();
+  }
+
   async updateSettings(s: AppSettings) {
+    if (!this.db) return;
     this.db.run(`UPDATE settings SET json_content = ?, version = ? WHERE id = 1`, [JSON.stringify(s), s.version]);
     await this.saveToIDB();
   }
 
-  // --- Helper ---
   private mapResults(res: any) {
     const columns = res.columns;
     return res.values.map((row: any[]) => {
@@ -392,15 +371,6 @@ class DatabaseService {
       });
       return obj;
     });
-  }
-
-  // --- Online Sync Stub ---
-  async syncWithServer() {
-     // This would select WHERE isSynced = 0 and POST to API
-     console.log("Syncing offline data to server...");
-     // Simulate sync
-     this.db.run("UPDATE transactions SET isSynced = 1 WHERE isSynced = 0");
-     await this.saveToIDB();
   }
 }
 

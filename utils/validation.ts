@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- Shared Validators ---
@@ -17,6 +18,7 @@ export const StaffSchema = z.object({
   avatar: z.string(),
   username: z.string().optional(),
   passwordHash: z.string().optional(),
+  status: z.enum(['Active', 'Inactive']),
   version: versionSchema,
 });
 

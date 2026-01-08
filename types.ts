@@ -35,6 +35,7 @@ export interface Staff {
   avatar: string;
   username?: string;
   passwordHash?: string;
+  status: 'Active' | 'Inactive';
   version: number;
 }
 
