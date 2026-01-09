@@ -1,7 +1,7 @@
 
 import { Staff, Service, Product, Customer, Transaction, Appointment, AppSettings, Business, AuditLog } from '../types';
 
-const API_URL = process.env.REACT_APP_API_BASE_URL;
+const API_URL = "https://barberpos-1.onrender.com/api";
 
 class ApiService {
   private getHeaders() {
